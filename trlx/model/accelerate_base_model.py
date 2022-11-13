@@ -91,6 +91,7 @@ class AccelerateRLModel(BaseRLModel):
             self.config.train.total_steps,
             eta_min=self.config.train.lr_target,
         )
+        self.best_mean_reward = -float("inf")
 
     def tokenize(self, text: Union[Sequence[str], Sequence[torch.LongTensor]]):
         """
@@ -180,6 +181,10 @@ class AccelerateRLModel(BaseRLModel):
                 columns_data.append(rewards)
                 stats["mean_reward"] = mean_reward
                 print(f"{mean_reward=}")
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    self.save()
+                    print("=== Saved ===")
 
             # additionally log any other metrics
             if self.metric_fn:
@@ -234,7 +239,7 @@ class AccelerateRLModel(BaseRLModel):
                     self.iter_count += 1
 
                     if self.iter_count % self.config.train.checkpoint_interval == 0:
-                        self.save()
+                        pass#self.save()
 
                     if self.iter_count % self.config.train.eval_interval == 0:
                         results = self.evaluate()
@@ -253,7 +258,7 @@ class AccelerateRLModel(BaseRLModel):
                     tbar.update()
 
                     if self.iter_count >= self.total_steps:
-                        self.save()
+                        #self.save()
                         return self.evaluate()
 
                 self.post_backward_callback()
