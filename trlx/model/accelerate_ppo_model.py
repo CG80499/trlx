@@ -1,4 +1,5 @@
 from typing import Tuple
+import uuid, os, json
 
 import torch
 from torchtyping import TensorType
@@ -10,7 +11,7 @@ from trlx.model.accelerate_base_model import AccelerateRLModel
 from trlx.model.nn.ppo_models import (
     AdaptiveKLController,
     FixedKLController,
-    GPTHydraHeadWithValueModel,
+    CausalLMHydraWithValueHead,
 )
 from trlx.pipeline.ppo_pipeline import PPORolloutStorage
 from trlx.utils.modeling import logprobs_from_logits
@@ -20,6 +21,12 @@ from trlx.utils.modeling import logprobs_from_logits
 class AcceleratePPOModel(AccelerateRLModel):
     def __init__(self, config):
         super().__init__(config)
+
+        if config.train.rollout_logging_dir is not None:
+            self.log_rollouts = True
+            self.setup_rollout_logging(config)
+        else:
+            self.log_rollouts = False
 
         self.store = PPORolloutStorage(self.tokenizer.pad_token_id)
 
@@ -46,8 +53,8 @@ class AcceleratePPOModel(AccelerateRLModel):
         )
 
     def get_arch(self, config: TRLConfig):
-        return GPTHydraHeadWithValueModel(
-            self.config.model.model_path, self.config.model.num_layers_unfrozen
+        return CausalLMHydraWithValueHead(
+            config.model.model_path, config.model.num_layers_unfrozen
         )
 
     def get_model_inputs(
@@ -55,7 +62,9 @@ class AcceleratePPOModel(AccelerateRLModel):
         query_tensors: TensorType["batch_size", "query_size"],
         response_tensors: TensorType["batch_size", "response_size"],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        tokens = torch.cat((query_tensors, response_tensors), dim=1)
+        tokens = torch.cat((query_tensors, response_tensors), dim=1)[
+            :, -self.max_length :
+        ]
         attention_mask = (
             tokens.not_equal(self.tokenizer.pad_token_id).long().to(tokens.device)
         )
@@ -72,7 +81,8 @@ class AcceleratePPOModel(AccelerateRLModel):
         old_values = batch.values.to(self.accelerator.device)
         old_rewards = batch.rewards.to(self.accelerator.device)
 
-        response_length = response_tensors.shape[-1]
+        response_length = old_rewards.shape[1]
+
         advantages, returns = self.config.method.get_advantages_and_returns(
             old_values, old_rewards, response_length
         )
@@ -80,15 +90,21 @@ class AcceleratePPOModel(AccelerateRLModel):
         tokens, attention_mask, position_ids = self.get_model_inputs(
             query_tensors, response_tensors
         )
-        logits, _, values_pred = self.model(
-            tokens, attention_mask, position_ids=position_ids
+
+        logits, *_, values_pred = self.model(
+            tokens, attention_mask=attention_mask, position_ids=position_ids
         )
+        values_pred = values_pred[:, :-1]
         logprobs = logprobs_from_logits(logits[:, :-1, :], tokens[:, 1:])
+        attention_mask = attention_mask[:, :-1]
+
         # Only the response part of the values/logprobs is needed
+        start = query_tensors.shape[1] - 1
+        end = start + response_length
         logprobs, values_pred, mask = (
-            logprobs[:, -response_length:],
-            values_pred[:, -response_length:],
-            attention_mask[:, -response_length:],
+            logprobs[:, start:end],
+            values_pred[:, start:end],
+            attention_mask[:, start:end],
         )
 
         loss, stats = self.config.method.loss(
@@ -103,7 +119,24 @@ class AcceleratePPOModel(AccelerateRLModel):
         self.approx_kl = stats["policy/approx_kl"]  # Update kl controller stats
         return loss, stats
 
+    def setup_rollout_logging(self, config):
+        # Make rollout logging dir for this run and store config
+        exists = os.path.exists(config.train.rollout_logging_dir)
+        isdir = os.path.isdir(config.train.rollout_logging_dir)
+        assert exists and isdir
+
+        self.run_id = f"run-{uuid.uuid4()}"
+        self.rollout_logging_dir = os.path.join(
+            config.train.rollout_logging_dir, self.run_id
+        )
+        os.mkdir(self.rollout_logging_dir)
+
+        with open(os.path.join(self.rollout_logging_dir, "config.json"), "w") as f:
+            f.write(json.dumps(config.to_dict(), indent=2))
+
     def post_epoch_callback(self):
+        if self.log_rollouts:
+            self.store.export_history(location=self.rollout_logging_dir)
         self.store.clear_history()
         self.orch.make_experience(
             self.config.method.num_rollouts, self.iter_count
