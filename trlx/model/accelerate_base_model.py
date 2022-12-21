@@ -52,9 +52,11 @@ class AccelerateRLModel(BaseRLModel):
 
         # Retrieves model equipped for ppo, ilql, etc
         self.model = self.get_arch(self.config)
-        freeze_bottom_causal_layers(
-            self.model.base_model, self.config.model.num_layers_unfrozen
-        )
+
+        if not "t5" in config.model.model_path.lower():
+            freeze_bottom_causal_layers(
+                self.model.base_model, self.config.model.num_layers_unfrozen
+            )
 
         if config.model.tokenizer_path:
             self.tokenizer = AutoTokenizer.from_pretrained(config.model.tokenizer_path)
@@ -208,7 +210,7 @@ class AccelerateRLModel(BaseRLModel):
                 columns.append("reward")
                 columns_data.append(rewards)
                 stats["reward/mean"] = mean_reward
-                print(f"{mean_reward=}")
+                print(f"Mean rewards: {mean_reward}")
                 if mean_reward > self.best_mean_reward:
                     self.best_mean_reward = mean_reward
                     self.save()

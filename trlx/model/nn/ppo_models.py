@@ -234,6 +234,7 @@ class CausalLMWithValueHead(nn.Module):
             self.config = transformers.AutoConfig.from_pretrained(config)
         else:
             self.config = config
+        
         self.base_model = transformers.AutoModelForCausalLM.from_pretrained(
             self.config.name_or_path
         )
@@ -401,6 +402,72 @@ class CausalLMHydraWithValueHead(nn.Module):
             cross_attentions=None,
             value=value,
         )
+
+
+class T5HydraWithValueHead(nn.Module):
+    """Conditional generation (T5) with value head"""
+
+    def __init__(self, config: str):
+        super().__init__()
+        self.config = transformers.AutoConfig.from_pretrained(config)
+        self.base_model = transformers.T5ForConditionalGeneration.from_pretrained(
+            self.config.name_or_path 
+        )
+        self.v_head = make_head(self.config.d_model, 1)
+
+    def _add_start_token_to_decoder_ids(self, decoder_input_ids, decoder_attention_mask):
+        """Add padding to decoder_input_ids"""
+        batch_size, seq_len = decoder_input_ids.shape
+        padding = torch.zeros(batch_size, 1, dtype=decoder_input_ids.dtype).to(
+            decoder_input_ids.device
+        )
+        decoder_attention_mask = torch.cat(
+            [1 - padding, decoder_attention_mask], dim=1 # Start token is not masked
+        )
+
+        return torch.cat([padding, decoder_input_ids], dim=1), decoder_attention_mask
+
+    def generate(self, input_ids, **x):
+        return self.base_model.generate(input_ids, **x)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
+    ):
+        encoder_outputs = self.base_model.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+
+        decoder_outputs = self.base_model.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_attention_mask=attention_mask,
+        )
+
+        hidden_state = decoder_outputs.last_hidden_state
+
+        lm_logits = self.base_model.lm_head(hidden_state)
+
+        value = self.v_head(hidden_state).squeeze(-1)
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=None,
+            logits=lm_logits,
+            value=value,
+        )
+
 
 
 class GPTModelBranch(transformers.PreTrainedModel):
@@ -992,7 +1059,7 @@ class BloomModelBranch(transformers.PreTrainedModel):
 
 def hf_get_causal_lm_branch_class(
     config: transformers.PretrainedConfig,
-) -> "ModelBranch":
+) -> "ModelBranch": # type: ignore
     """Returns the CausalLM branch class for the given config."""
     gpt_branch_supported_archs = [
         "GPTJForCausalLM",

@@ -1,5 +1,5 @@
 train:
-  seq_length: 1024
+  seq_length: 64
   epochs: 50
   total_steps: 10000
   batch_size: 128
@@ -8,13 +8,12 @@ train:
   eval_interval: 100
 
   pipeline: "PromptPipeline"
-  orchestrator: "PPOOrchestrator"
+  orchestrator: "T5PPOOrchestrator"
 
 model:
-  model_type: "AcceleratePPOModel"
-  model_path: "lvwerra/gpt2-imdb"
-  tokenizer_path: "gpt2"
-  num_layers_unfrozen: 2
+  model_type: "T5AcceleratePPOModel"
+  model_path: "google/flan-t5-small"
+  tokenizer_path: "google/flan-t5-small"
 
 optimizer:
   name: "adamw"
