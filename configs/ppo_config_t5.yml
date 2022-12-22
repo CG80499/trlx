@@ -1,11 +1,12 @@
 train:
-  seq_length: 64
-  epochs: 50
+  seq_length: 40
+  epochs: 500
   total_steps: 10000
-  batch_size: 128
+  batch_size: 8
 
   checkpoint_interval: 10000
-  eval_interval: 100
+  checkpoint_dir: "/home/charlie/gpt4_reward_model.py/trlx/checkpoints"
+  eval_interval: 16
 
   pipeline: "PromptPipeline"
   orchestrator: "T5PPOOrchestrator"
@@ -31,17 +32,17 @@ scheduler:
 
 method:
   name: "ppoconfig"
-  num_rollouts: 128
-  chunk_size: 128
+  num_rollouts: 16
+  chunk_size: 16
   ppo_epochs: 4
   init_kl_coef: 0.05
-  target: 6
+  target: 0.06
   horizon: 10000
-  gamma: 1
+  gamma: 0.99
   lam: 0.95
   cliprange: 0.2
   cliprange_value: 0.2
-  vf_coef: 1
+  vf_coef: 1.0
   scale_reward: False
   ref_mean: null
   ref_std: null
