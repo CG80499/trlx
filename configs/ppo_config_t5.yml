@@ -1,25 +1,27 @@
 train:
-  seq_length: 40
-  epochs: 500
-  total_steps: 10000
-  batch_size: 8
+  seq_length: 512
+  epochs: 500000 # We'll stop training when we reach 10,000 steps
+  total_steps: 6000
+  batch_size: 1
 
-  checkpoint_interval: 10000
-  checkpoint_dir: "/home/charlie/gpt4_reward_model.py/trlx/checkpoints"
-  eval_interval: 16
+  checkpoint_interval: 100000000000 # Don't save checkpoints
+  checkpoint_dir: "/root/trlx-with-T5/checkpoints"
+  eval_interval: 64
 
   pipeline: "PromptPipeline"
   orchestrator: "T5PPOOrchestrator"
 
 model:
   model_type: "T5AcceleratePPOModel"
-  model_path: "google/flan-t5-small"
-  tokenizer_path: "google/flan-t5-small"
+  model_path: "/root/trlx-with-T5/base_models/FT-Flan-T5-XXL"
+  tokenizer_path: "google/flan-t5-xxl"
+  # model_path: "google/flan-t5-small"
+  # tokenizer_path: "google/flan-t5-small"
 
 optimizer:
   name: "adamw"
   kwargs:
-    lr: 1.0e-4
+    lr: 5.0e-5
     betas: [0.9, 0.95]
     eps: 1.0e-8
     weight_decay: 1.0e-6
@@ -27,17 +29,17 @@ optimizer:
 scheduler:
   name: "cosine_annealing"
   kwargs:
-    T_max: 10000 # train.total_steps
-    eta_min: 1.0e-4
+    T_max: 6000 # train.total_steps
+    eta_min: 5.0e-5
 
 method:
   name: "ppoconfig"
-  num_rollouts: 16
-  chunk_size: 16
+  num_rollouts: 8
+  chunk_size: 8
   ppo_epochs: 4
-  init_kl_coef: 0.05
-  target: 0.06
-  horizon: 10000
+  init_kl_coef: 0.5
+  target: 6
+  horizon: 6000
   gamma: 0.99
   lam: 0.95
   cliprange: 0.2
@@ -46,9 +48,9 @@ method:
   scale_reward: False
   ref_mean: null
   ref_std: null
-  cliprange_reward: 10
+  cliprange_reward: 12
   gen_kwargs:
-    max_new_tokens: 40
+    max_new_tokens: 50
     top_k: 0
     top_p: 1.0
     do_sample: True

@@ -27,6 +27,8 @@ def _add_start_token_to_decoder_ids(decoder_input_ids, decoder_attention_mask):
 
     return torch.cat([padding, decoder_input_ids], dim=1), decoder_attention_mask
 
+GPU_REFERENCE_MODEL = 2
+
 @register_orchestrator
 class PPOOrchestrator(Orchestrator):
     """
@@ -134,9 +136,9 @@ class PPOOrchestrator(Orchestrator):
                     )
                 else:
                     ref_logits, _, *_ = self.ref_model(
-                        all_tokens.cpu(),
-                        attention_mask=attention_mask.cpu(),
-                        position_ids=position_ids.cpu(),
+                        all_tokens.to(self.reference_device),
+                        attention_mask=attention_mask.to(self.reference_device),
+                        position_ids=position_ids.to(self.reference_device),
                     )
                     ref_logits = ref_logits.to(self.rl_model.accelerator.device)
 
@@ -201,9 +203,16 @@ class T5PPOOrchestrator(PPOOrchestrator):
     ):
         super().__init__(model, pipeline, reward_fn, metric_fn, chunk_size)
 
+        print(" ===== LOADING REFERENCE MODEL =====")
         self.ref_model = transformers.T5ForConditionalGeneration.from_pretrained(
             model.config.model.model_path
         )
+
+        self.reference_device = torch.device(f"cuda:{GPU_REFERENCE_MODEL}")
+
+                    #if GPU_REFERENCE_MODEL:
+        print(" ===== MOVING REFERENCE MODEL TO GPU =====")
+        self.ref_model = self.ref_model.to(torch.bfloat16).to(self.reference_device)
 
 
     def make_experience(self, num_rollouts: int = 1024, iter_count: int = 0):
@@ -222,7 +231,7 @@ class T5PPOOrchestrator(PPOOrchestrator):
                 batch = next(self.pipeline_iterator)
 
             exp_generate_time = time()
-            samples = self.rl_model.generate(**batch)
+            samples = self.rl_model.generate(**batch, use_cache=True, max_new_tokens=50, do_sample=True)
             stats["time/exp_generate"] = time() - exp_generate_time
 
             query_tensors = batch.input_ids
@@ -272,10 +281,10 @@ class T5PPOOrchestrator(PPOOrchestrator):
                 )
                 logits, values = outputs.logits, outputs.value
                 ref_logits = self.ref_model(
-                    input_ids=input_ids.cpu(),
-                    attention_mask=attention_mask.cpu(),
-                    decoder_input_ids=decoder_input_ids.cpu(),
-                    decoder_attention_mask=decoder_attention_mask.cpu(),
+                    input_ids=input_ids.to(self.reference_device),
+                    attention_mask=attention_mask.to(self.reference_device),
+                    decoder_input_ids=decoder_input_ids.to(self.reference_device),
+                    decoder_attention_mask=decoder_attention_mask.to(self.reference_device),
                 ).logits
 
                 ref_logits = ref_logits.to(self.rl_model.accelerator.device)

@@ -5,7 +5,6 @@ from trlx.data.configs import TRLConfig
 from trlx.utils import set_seed
 from trlx.utils.loading import get_model, get_orchestrator, get_pipeline
 
-
 def train(
     model_path: Optional[str] = None,
     reward_fn: Optional[Callable] = None,

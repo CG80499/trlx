@@ -14,29 +14,52 @@ import requests
 
 from trlx.data.configs import TRLConfig
 
-url = 'http://65.108.33.71:5000/api_batched'
+from random import shuffle
 
-
-# def reward_fn(samples: List[str]) -> List[float]:
-#     return requests.post(url, json = {"texts": samples}).json()
+url = 'http://65.108.32.170:5000/rewards'
 
 def reward_fn(samples: List[str]) -> List[float]:
-    return [s.count("the") for s in samples]
+     return requests.post(url, json = {"texts": samples}).json()["rewards"]
+
+PROMPT = """Question: {query}
+
+Relevant paper:
+Title: {title}
+Abstract: {abstract}
+
+Write a helpful 1-line summary of the paper based on the question.
+
+Helpful summary:"""
+
+with open("/root/fine-tuning-takeaway-models/human_ft_data.json", "r") as f:
+    data = json.load(f)
+
+with open("/root/fine-tuning-takeaway-models/human_ft_data_test.json", "r") as f:
+    data_test = json.load(f)
+
+prompts = [
+    PROMPT.format(query=d["query"], title=d["title"], abstract=d["abstract"][-2200:])
+    for d in data
+]
+
+eval_prompts = [
+    PROMPT.format(query=d["query"], title=d["title"], abstract=d["abstract"][-2200:])
+    for d in data_test
+]
+
+shuffle(eval_prompts)
 
 def main():
 
     # with open('/root/trlx/examples/prompts.json', 'r') as f:
     #     prompts = json.load(f)
 
-    prompts = ["The cat went to", "The dog went to", "I took", "I went to", "The women went to"]
-
     config = TRLConfig.load_yaml("configs/ppo_config_t5.yml")
     
     model = trlx.train(
-        "google/flan-t5-small",
         reward_fn=reward_fn,
         prompts=prompts,
-        eval_prompts=prompts,
+        eval_prompts=eval_prompts,
         config=config,
     )
 

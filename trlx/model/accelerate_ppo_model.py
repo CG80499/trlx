@@ -22,6 +22,8 @@ import wandb
 
 import ray
 
+from tqdm import tqdm
+
 
 @register_model
 class AcceleratePPOModel(AccelerateRLModel):
@@ -243,25 +245,24 @@ class T5AcceleratePPOModel(AcceleratePPOModel):
     def evaluate(self):
         """Samples model on `eval_prompts`, logs stats with `reward_fn` or `metric_fn` if provided"""
         stats = {}
-        all_samples = []
-        prompts_sizes = []
         generate_time = time()
         prompts_list, responses = [], []
-        for prompts in self.eval_dataloader:
+        print("Starting evaluation...")
+        for prompts in tqdm(self.eval_dataloader, desc="Evaluating"):
             if isinstance(prompts, torch.Tensor):
                 attention_mask = (
                     prompts.not_equal(self.tokenizer.pad_token_id)
                     .long()
                     .to(prompts.device)
                 )
-                samples = self.generate(prompts, attention_mask=attention_mask)
+                samples = self.generate(prompts, attention_mask=attention_mask, use_cache=True, max_new_tokens=50, do_sample=False)
                 prompts_list.extend(
                     self.tokenizer.batch_decode(
                         prompts, skip_special_tokens=True
                     )
                 )
             else:
-                samples = self.generate(**prompts)
+                samples = self.generate(**prompts, use_cache=True, max_new_tokens=50, do_sample=False)
                 prompts_list.extend(
                     self.tokenizer.batch_decode(
                         prompts["input_ids"], skip_special_tokens=True
