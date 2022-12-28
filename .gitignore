@@ -153,3 +153,4 @@ ckpts/
 ray_results/
 checkpoints/
 _checkpoints/
+base_models/
