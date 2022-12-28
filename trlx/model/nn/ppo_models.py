@@ -413,6 +413,13 @@ class T5HydraWithValueHead(nn.Module):
         self.base_model = transformers.T5ForConditionalGeneration.from_pretrained(
             self.config.name_or_path 
         )
+        
+        # Freeze encoder and decoder embeddings
+
+        self.base_model.encoder.embed_tokens.weight.requires_grad = False
+
+        self.base_model.decoder.embed_tokens.weight.requires_grad = False
+
         self.v_head = make_head(self.config.d_model, 1)
 
     def _add_start_token_to_decoder_ids(self, decoder_input_ids, decoder_attention_mask):
