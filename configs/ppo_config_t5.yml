@@ -10,6 +10,7 @@ train:
 
   pipeline: "PromptPipeline"
   orchestrator: "T5PPOOrchestrator"
+  seed: 314159
 
 model:
   model_type: "T5AcceleratePPOModel"
@@ -37,7 +38,7 @@ method:
   num_rollouts: 8
   chunk_size: 8
   ppo_epochs: 4
-  init_kl_coef: 0.5
+  init_kl_coef: 2.0
   target: 6
   horizon: 6000
   gamma: 0.99

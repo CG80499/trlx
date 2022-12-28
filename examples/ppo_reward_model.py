@@ -14,9 +14,7 @@ import requests
 
 from trlx.data.configs import TRLConfig
 
-from random import shuffle
-
-url = 'http://65.108.32.170:5000/rewards'
+url = 'http://65.108.33.75:5000/rewards'
 
 def reward_fn(samples: List[str]) -> List[float]:
      return requests.post(url, json = {"texts": samples}).json()["rewards"]
@@ -47,12 +45,7 @@ eval_prompts = [
     for d in data_test
 ]
 
-shuffle(eval_prompts)
-
 def main():
-
-    # with open('/root/trlx/examples/prompts.json', 'r') as f:
-    #     prompts = json.load(f)
 
     config = TRLConfig.load_yaml("configs/ppo_config_t5.yml")
     
