@@ -47,7 +47,7 @@ eval_prompts = [
 
 def main():
 
-    config = TRLConfig.load_yaml("configs/ppo_config_t5.yml")
+    config = TRLConfig.load_yaml("configs/ppo_config_t5_old.yml")
     
     model = trlx.train(
         reward_fn=reward_fn,
