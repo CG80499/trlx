@@ -10,7 +10,7 @@ train:
 
   pipeline: "PromptPipeline"
   orchestrator: "T5PPOOrchestrator"
-  seed: 314159
+  seed: 1000
 
 model:
   model_type: "T5AcceleratePPOModel"
